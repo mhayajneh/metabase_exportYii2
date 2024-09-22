@@ -3,93 +3,106 @@
 namespace app\controllers;
 
 use Yii;
-use yii\web\Controller;
-use yii\web\NotFoundHttpException;
 use app\models\MetabaseDatabase;
+use app\models\ReportCard;
 use app\models\MetabaseTable;
 use app\models\MetabaseField;
-use app\models\ReportDashboard;
-use app\models\ReportCard;
 use app\models\DashboardTab;
+use app\models\ReportDashboard;
 use app\models\ReportDashboardcard;
-use app\models\CloneForm;
+use yii\web\Controller;
+use yii\web\NotFoundHttpException;
 
 class DatabaseController extends Controller
 {
     public function actionClone()
     {
-        $model = new CloneForm();
+        $model = new MetabaseDatabase();
 
-        if ($model->load(Yii::$app->request->post()) && $model->validate()) {
-            $db = $this->findModel($model->source_db_id);
+        if ($model->load(Yii::$app->request->post())) {
+            $existingDatabaseId = $model->existing_database_id;
+            $newDatabaseName = $model->new_database_name;
 
-            // Create new database record
-            $newDb = new MetabaseDatabase();
-            $newDb->name = $model->new_db_name;
-            $newDb->save();
-
-            // Clone tables
-            foreach ($db->tables as $table) {
-                $newTable = new MetabaseTable();
-                $newTable->name = $table->name;
-                $newTable->db = $newDb->id;
-                $newTable->save();
-
-                // Clone fields
-                foreach ($table->fields as $field) {
-                    $newField = new MetabaseField();
-                    $newField->name = $field->name;
-                    $newField->table_id = $newTable->id;
-                    $newField->save();
+            $transaction = Yii::$app->db->beginTransaction();
+            try {
+                // Clone MetabaseDatabase
+                $existingDatabase = MetabaseDatabase::findOne($existingDatabaseId);
+                if (!$existingDatabase) {
+                    throw new NotFoundHttpException('The requested database does not exist.');
                 }
-            }
 
-            // Clone dashboards
-            foreach (ReportDashboard::find()->where(['db' => $model->source_db_id])->all() as $dashboard) {
-                $newDashboard = new ReportDashboard();
-                $newDashboard->name = $dashboard->name;
-                $newDashboard->save();
+                $newDatabase = new MetabaseDatabase();
+                $newDatabase->attributes = $existingDatabase->attributes;
+                $newDatabase->name = $newDatabaseName;
+                $newDatabase->save(false);
 
-                // Clone cards
-                foreach ($dashboard->cards as $card) {
-                    $newCard = new ReportCard();
-                    $newCard->name = $card->name;
-                    $newCard->dashboard_id = $newDashboard->id;
-                    $newCard->save();
+                // Clone related MetabaseTables
+                $tables = MetabaseTable::find()->where(['database_id' => $existingDatabaseId])->all();
+                foreach ($tables as $table) {
+                    $newTable = new MetabaseTable();
+                    $newTable->attributes = $table->attributes;
+                    $newTable->database_id = $newDatabase->id;
+                    $newTable->id = null; // Ensure ID is not set
+                    $newTable->save(false);
 
-                    // Clone dashboard cards
-                    foreach (ReportDashboardcard::find()->where(['card_id' => $card->id])->all() as $dashboardCard) {
-                        $newDashboardCard = new ReportDashboardcard();
-                        $newDashboardCard->dashboard_id = $newDashboard->id;
-                        $newDashboardCard->card_id = $newCard->id;
-                        $newDashboardCard->save();
+                    // Clone related MetabaseFields for each table
+                    $fields = MetabaseField::find()->where(['table_id' => $table->id])->all();
+                    foreach ($fields as $field) {
+                        $newField = new MetabaseField();
+                        $newField->attributes = $field->attributes;
+                        $newField->table_id = $newTable->id;
+                        $newField->id = null;
+                        $newField->save(false);
                     }
                 }
 
-                // Clone tabs
-                foreach ($dashboard->tabs as $tab) {
-                    $newTab = new DashboardTab();
-                    $newTab->name = $tab->name;
-                    $newTab->dashboard_id = $newDashboard->id;
-                    $newTab->save();
+                // Clone ReportCard
+                $cards = ReportCard::find()->where(['database_id' => $existingDatabaseId])->all();
+                foreach ($cards as $card) {
+                    $newCard = new ReportCard();
+                    $newCard->attributes = $card->attributes;
+                    $newCard->database_id = $newDatabase->id;
+                    $newCard->save(false);
                 }
-            }
 
-            return $this->redirect(['view', 'id' => $newDb->id]);
+                // Clone ReportDashboard
+                $dashboards = ReportDashboard::find()->where(['database_id' => $existingDatabaseId])->all();
+                foreach ($dashboards as $dashboard) {
+                    $newDashboard = new ReportDashboard();
+                    $newDashboard->attributes = $dashboard->attributes;
+                    $newDashboard->database_id = $newDatabase->id;
+                    $newDashboard->save(false);
+
+                    // Clone DashboardTabs
+                    $tabs = DashboardTab::find()->where(['dashboard_id' => $dashboard->id])->all();
+                    foreach ($tabs as $tab) {
+                        $newTab = new DashboardTab();
+                        $newTab->attributes = $tab->attributes;
+                        $newTab->dashboard_id = $newDashboard->id;
+                        $newTab->save(false);
+                    }
+
+                    // Clone ReportDashboardCard
+                    $dashboardCards = ReportDashboardcard::find()->where(['dashboard_id' => $dashboard->id])->all();
+                    foreach ($dashboardCards as $dashboardCard) {
+                        $newDashboardCard = new ReportDashboardcard();
+                        $newDashboardCard->attributes = $dashboardCard->attributes;
+                        $newDashboardCard->dashboard_id = $newDashboard->id;
+                        $newDashboardCard->save(false);
+                    }
+                }
+
+                $transaction->commit();
+                Yii::$app->session->setFlash('success', 'Metabase Database cloned successfully.');
+                return $this->redirect(['index']);
+            } catch (\Exception $e) {
+                $transaction->rollBack();
+                Yii::$app->session->setFlash('error', 'Error occurred: ' . $e->getMessage());
+            }
         }
 
         return $this->render('clone', [
             'model' => $model,
-            'databases' => MetabaseDatabase::find()->all(), // Pass all databases for selection
         ]);
-    }
-
-    protected function findModel($id)
-    {
-        if (($model = MetabaseDatabase::findOne($id)) !== null) {
-            return $model;
-        }
-
-        throw new NotFoundHttpException('The requested page does not exist.');
     }
 }

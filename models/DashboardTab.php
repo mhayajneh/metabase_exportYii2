@@ -15,10 +15,20 @@ class DashboardTab extends ActiveRecord
     {
         return [
             [['name', 'dashboard_id'], 'required'],
-            [['name'], 'string', 'max' => 255],
             [['dashboard_id'], 'integer'],
+            [['name'], 'string', 'max' => 255],
         ];
     }
+
+    public function attributeLabels()
+    {
+        return [
+            'id' => 'ID',
+            'name' => 'Name',
+            'dashboard_id' => 'Dashboard ID',
+        ];
+    }
+
 
     public function getDashboard()
     {

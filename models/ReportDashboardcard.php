@@ -14,8 +14,20 @@ class ReportDashboardcard extends ActiveRecord
     public function rules()
     {
         return [
-            [['dashboard_id', 'card_id'], 'required'],
-            [['dashboard_id', 'card_id'], 'integer'],
+            [['dashboard_id', 'name'], 'required'],
+            [['dashboard_id'], 'integer'],
+            [['description'], 'string'],
+            [['name'], 'string', 'max' => 255],
+        ];
+    }
+
+    public function attributeLabels()
+    {
+        return [
+            'id' => 'ID',
+            'dashboard_id' => 'Dashboard ID',
+            'name' => 'Name',
+            'description' => 'Description',
         ];
     }
 

@@ -15,8 +15,21 @@ class MetabaseField extends ActiveRecord
     {
         return [
             [['name', 'table_id'], 'required'],
-            [['name'], 'string', 'max' => 255],
             [['table_id'], 'integer'],
+            [['description', 'settings'], 'string'],
+            [['name', 'type'], 'string', 'max' => 255],
+        ];
+    }
+
+    public function attributeLabels()
+    {
+        return [
+            'id' => 'ID',
+            'name' => 'Name',
+            'description' => 'Description',
+            'table_id' => 'Table ID',
+            'type' => 'Type',
+            'settings' => 'Settings',
         ];
     }
 

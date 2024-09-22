@@ -14,9 +14,20 @@ class MetabaseTable extends ActiveRecord
     public function rules()
     {
         return [
-            [['name', 'db'], 'required'],
+            [['name', 'database_id'], 'required'],
+            [['database_id'], 'integer'],
+            [['description'], 'string'],
             [['name'], 'string', 'max' => 255],
-            [['db'], 'integer'],
+        ];
+    }
+
+    public function attributeLabels()
+    {
+        return [
+            'id' => 'ID',
+            'name' => 'Name',
+            'database_id' => 'Database ID',
+            'description' => 'Description',
         ];
     }
 
@@ -27,6 +38,6 @@ class MetabaseTable extends ActiveRecord
 
     public function getDatabase()
     {
-        return $this->hasOne(MetabaseDatabase::class, ['id' => 'db']);
+        return $this->hasOne(MetabaseDatabase::class, ['id' => 'database_id']);
     }
 }
